@@ -1,0 +1,18 @@
+[submodule "contracts/uniswap-v2-re-work/lib/forge-std"]
+	path = contracts/uniswap-v2-re-work/lib/forge-std
+	url = https://github.com/foundry-rs/forge-std
+[submodule "contracts/uniswap-v2-re-work/lib/solady"]
+	path = contracts/uniswap-v2-re-work/lib/solady
+	url = https://github.com/vectorized/solady
+[submodule "bonus/vault/lib/forge-std"]
+	path = bonus/vault/lib/forge-std
+	url = https://github.com/foundry-rs/forge-std
+[submodule "bonus/vault/lib/solady"]
+	path = bonus/vault/lib/solady
+	url = https://github.com/vectorized/solady
+[submodule "bonus/prerrequisites/lib/openzeppelin-contracts"]
+	path = bonus/prerrequisites/lib/openzeppelin-contracts
+	url = https://github.com/OpenZeppelin/openzeppelin-contracts
+[submodule "contracts/uniswap-v2-re-work/lib/openzeppelin-contracts"]
+	path = contracts/uniswap-v2-re-work/lib/openzeppelin-contracts
+	url = https://github.com/OpenZeppelin/openzeppelin-contracts
