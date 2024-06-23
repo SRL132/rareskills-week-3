@@ -168,10 +168,8 @@ contract Pair is ERC20, ReentrancyGuard, IERC3156FlashLender {
         if (_amount == 0) {
             revert Pair__InsufficientOutputAmount();
         }
-        //q if we implemented a constant, should we have to use this function to strictly enforce the standard?
-        uint256 maximumFlashLoan = maxFlashLoan(_token);
 
-        if (_amount > maximumFlashLoan) {
+        if (_amount > MAX_FLASH_LOAN) {
             revert Pair__MaxFlashLoanAmountExceeded();
         }
 
