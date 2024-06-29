@@ -20,22 +20,22 @@ contract FactoryTest is Test {
         factory = new Factory(feeToSetter);
         tokenA = new TokenA();
         tokenB = new TokenB();
-        pair = new Pair();
+        pair = new Pair(address(tokenA), address(tokenB));
     }
 
     function testFeeToSetter() public view {
-        assertEq(factory.s_feeToSetter(), feeToSetter);
+        assertEq(factory.feeToSetter(), feeToSetter);
     }
 
     function testFeeTo() public view {
-        assertEq(factory.s_feeTo(), address(0));
+        assertEq(factory.feeTo(), address(0));
     }
 
     function testCanSetFeeTo() public {
         address feeTo = makeAddr("FEE_TO");
         vm.prank(feeToSetter);
         factory.setFeeTo(feeTo);
-        assertEq(factory.s_feeTo(), feeTo);
+        assertEq(factory.feeTo(), feeTo);
     }
 
     function testOnlyFeeToSetterCanChangeSetFeeTo(address _notOwner) public {
@@ -49,7 +49,7 @@ contract FactoryTest is Test {
     function testCanSetFeeToSetter() public {
         vm.prank(feeToSetter);
         factory.setFeeToSetter(newFeeToSetter);
-        assertEq(factory.s_feeToSetter(), newFeeToSetter);
+        assertEq(factory.feeToSetter(), newFeeToSetter);
     }
 
     function testOnlyFeeToSetterCanChangeSetFeeToSetter(

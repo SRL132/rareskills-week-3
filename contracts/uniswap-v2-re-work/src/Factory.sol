@@ -15,13 +15,12 @@ contract Factory is IUniswapV2Factory {
     error Factory__ZeroAddress();
 
     //STORAGE VARIABLES
-    address public s_feeTo;
-    address public s_feeToSetter;
+    address s_feeTo;
+    address s_feeToSetter;
 
-    mapping(address token0 => mapping(address token1 => address pair))
-        public s_tokensToPair;
+    mapping(address token0 => mapping(address token1 => address pair)) s_tokensToPair;
 
-    uint256 public s_pairsCounter;
+    uint256 s_pairsCounter;
 
     //FUNCTIONS
     modifier onlyFeeToSetter() {
@@ -72,9 +71,7 @@ contract Factory is IUniswapV2Factory {
 
         bytes32 salt = keccak256(abi.encode(token0, token1));
 
-        pair = address(new Pair{salt: salt}());
-
-        Pair(pair).initialize(token0, token1);
+        pair = address(new Pair{salt: salt}(token0, token1));
 
         s_tokensToPair[token0][token1] = pair;
         s_tokensToPair[token1][token0] = pair;
@@ -108,5 +105,11 @@ contract Factory is IUniswapV2Factory {
     /// @return The address fees will be sent to
     function feeTo() external view override returns (address) {
         return s_feeTo;
+    }
+
+    /// @notice This function returns the fee to setter address
+    /// @return The address of the fee to setter
+    function feeToSetter() external view returns (address) {
+        return s_feeToSetter;
     }
 }

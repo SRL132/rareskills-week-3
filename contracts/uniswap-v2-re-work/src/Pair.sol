@@ -36,8 +36,8 @@ contract Pair is ERC20, ReentrancyGuard, IERC3156FlashLender {
 
     //STORAGE
     address public immutable i_factory;
-    address public s_token0;
-    address public s_token1;
+    address public immutable i_token0;
+    address public immutable i_token1;
 
     uint112 private s_reserve0; // uses single storage slot, accessible via getReserves
     uint112 private s_reserve1; // uses single storage slot, accessible via getReserves
@@ -72,6 +72,11 @@ contract Pair is ERC20, ReentrancyGuard, IERC3156FlashLender {
         address tokenIn;
     }
 
+    struct MinAmounts {
+        uint256 amount0;
+        uint256 amount1;
+    }
+
     //EVENTS
     event Swap(
         address indexed sender,
@@ -96,7 +101,7 @@ contract Pair is ERC20, ReentrancyGuard, IERC3156FlashLender {
 
     //FUNCTIONS
     modifier onlyValidToken(address _token) {
-        if (_token != s_token0 && _token != s_token1) {
+        if (_token != i_token0 && _token != i_token1) {
             revert Pair__InvalidToken();
         }
         _;
@@ -109,28 +114,19 @@ contract Pair is ERC20, ReentrancyGuard, IERC3156FlashLender {
         _;
     }
 
-    constructor() {
+    constructor(address _token0, address _token1) {
         i_factory = msg.sender;
+        i_token0 = _token0;
+        i_token1 = _token1;
     }
 
     //EXTERNAL FUNCTIONS
 
-    /// @dev Initialize the pair
-    /// @param _token0 Address of the first token
-    /// @param _token1 Address of the second token
-    function initialize(address _token0, address _token1) external {
-        if (msg.sender != i_factory) {
-            revert Pair__NotFactory();
-        }
-        s_token0 = _token0;
-        s_token1 = _token1;
-    }
-
     /// @dev Force reserves to match balances
     function sync() external nonReentrant {
         _update(
-            IERC20(s_token0).balanceOf(address(this)),
-            IERC20(s_token1).balanceOf(address(this)),
+            IERC20(i_token0).balanceOf(address(this)),
+            IERC20(i_token1).balanceOf(address(this)),
             s_reserve0,
             s_reserve1
         );
@@ -138,8 +134,8 @@ contract Pair is ERC20, ReentrancyGuard, IERC3156FlashLender {
     /// @dev force balances to match reserves
     /// @param _to Address to send the skimmed tokens to
     function skim(address _to) external nonReentrant {
-        address token0 = s_token0; // gas savings
-        address token1 = s_token1; // gas savings
+        address token0 = i_token0; // gas savings
+        address token1 = i_token1; // gas savings
         _safeTransfer(
             token0,
             _to,
@@ -177,20 +173,20 @@ contract Pair is ERC20, ReentrancyGuard, IERC3156FlashLender {
 
         (uint112 reserve0, uint112 reserve1) = getReserves();
 
-        uint256 referenceReserve = _token == s_token0 ? reserve0 : reserve1;
+        uint256 referenceReserve = _token == i_token0 ? reserve0 : reserve1;
 
         if (_amount > referenceReserve) {
             revert Pair__InsufficientLiquidity();
         }
 
-        _safeTransfer(_token, msg.sender, _amount);
+        _safeTransfer(_token, address(_receiver), _amount);
 
         bytes32 data = _receiver.onFlashLoan(
             msg.sender,
             _token,
             _amount,
             fee,
-            ""
+            _data
         );
 
         if (data != keccak256("ERC3156FlashBorrower.onFlashLoan")) {
@@ -198,7 +194,7 @@ contract Pair is ERC20, ReentrancyGuard, IERC3156FlashLender {
         }
 
         bool success = IERC20(_token).transferFrom(
-            msg.sender,
+            address(_receiver),
             address(this),
             _amount + fee
         );
@@ -207,8 +203,8 @@ contract Pair is ERC20, ReentrancyGuard, IERC3156FlashLender {
             revert Pair__TransferFailed();
         }
 
-        uint256 balance0 = IERC20(s_token0).balanceOf(address(this));
-        uint256 balance1 = IERC20(s_token1).balanceOf(address(this));
+        uint256 balance0 = IERC20(i_token0).balanceOf(address(this));
+        uint256 balance1 = IERC20(i_token1).balanceOf(address(this));
 
         _update(balance0, balance1, reserve0, reserve1);
 
@@ -232,13 +228,13 @@ contract Pair is ERC20, ReentrancyGuard, IERC3156FlashLender {
         deadlineNotPassed(_receiverAndDeadline.deadline)
         returns (uint256 liquidity)
     {
-        bool successA = IERC20(s_token0).transferFrom(
+        bool successA = IERC20(i_token0).transferFrom(
             msg.sender,
             address(this),
             _amountA
         );
 
-        bool successB = IERC20(s_token1).transferFrom(
+        bool successB = IERC20(i_token1).transferFrom(
             msg.sender,
             address(this),
             _amountB
@@ -279,16 +275,16 @@ contract Pair is ERC20, ReentrancyGuard, IERC3156FlashLender {
 
         SwapCache memory swapCache;
 
-        if (_tokenOut == s_token0) {
-            swapCache = SwapCache(_amountOut, 0, reserve1, reserve0, s_token1);
+        if (_tokenOut == i_token0) {
+            swapCache = SwapCache(_amountOut, 0, reserve1, reserve0, i_token1);
         } else {
-            swapCache = SwapCache(0, _amountOut, reserve0, reserve1, s_token0);
+            swapCache = SwapCache(0, _amountOut, reserve0, reserve1, i_token0);
         }
 
         if (_amountOut > swapCache.referenceReserveOut) {
             revert Pair__InsufficientLiquidity();
         }
-        //q better practice to just pass the whole swapCache as a parameter to the function or only the fields you need?
+
         uint256 amountIn = _swapTokens(
             _tokenOut,
             swapCache.tokenIn,
@@ -328,6 +324,7 @@ contract Pair is ERC20, ReentrancyGuard, IERC3156FlashLender {
         uint256 _amountBMin,
         ReceiverAndDeadline calldata _receiverAndDeadline
     ) external nonReentrant deadlineNotPassed(_receiverAndDeadline.deadline) {
+        //q this transferFrom could be redundant since pair itself is the token
         bool success = IERC20(address(this)).transferFrom(
             msg.sender,
             address(this),
@@ -338,7 +335,11 @@ contract Pair is ERC20, ReentrancyGuard, IERC3156FlashLender {
             revert Pair__TransferFailed();
         }
 
-        _burnAndUpdate(_receiverAndDeadline.receiver, _amountAMin, _amountBMin);
+        _burnAndUpdate(
+            _amount,
+            _receiverAndDeadline.receiver,
+            MinAmounts(_amountAMin, _amountBMin)
+        );
     }
 
     //PUBLIC FUNCTIONS
@@ -400,7 +401,9 @@ contract Pair is ERC20, ReentrancyGuard, IERC3156FlashLender {
         uint112 _reserve1
     ) internal {
         unchecked {
-            uint32 blockTimestamp = uint32(block.timestamp % 2 ** 32);
+            uint32 blockTimestamp = uint32(
+                ((block.timestamp % (type(uint32).max)) + 1)
+            );
 
             uint32 timeElapsed = blockTimestamp - s_blockTimestampLast; // overflow is desired
 
@@ -567,7 +570,7 @@ contract Pair is ERC20, ReentrancyGuard, IERC3156FlashLender {
         uint256 _balance0,
         uint256 _balance1
     ) private view returns (uint256) {
-        return _token == s_token0 ? _balance0 : _balance1;
+        return _token == i_token0 ? _balance0 : _balance1;
     }
 
     /// @dev Calculate and validate balances
@@ -581,8 +584,8 @@ contract Pair is ERC20, ReentrancyGuard, IERC3156FlashLender {
         uint112 _reserve0,
         uint112 _reserve1
     ) private {
-        uint256 balance0 = IERC20(s_token0).balanceOf(address(this));
-        uint256 balance1 = IERC20(s_token1).balanceOf(address(this));
+        uint256 balance0 = IERC20(i_token0).balanceOf(address(this));
+        uint256 balance1 = IERC20(i_token1).balanceOf(address(this));
 
         uint256 amount0In = _getReferenceAmountIn(
             balance0,
@@ -661,8 +664,8 @@ contract Pair is ERC20, ReentrancyGuard, IERC3156FlashLender {
         (uint112 reserve0, uint112 reserve1) = getReserves();
         bool feeOn = _mintFee(reserve0, reserve1);
 
-        uint256 balance0 = IERC20(s_token0).balanceOf(address(this));
-        uint256 balance1 = IERC20(s_token1).balanceOf(address(this));
+        uint256 balance0 = IERC20(i_token0).balanceOf(address(this));
+        uint256 balance1 = IERC20(i_token1).balanceOf(address(this));
 
         uint256 amount0 = balance0 - reserve0;
         uint256 amount1 = balance1 - reserve1;
@@ -700,18 +703,18 @@ contract Pair is ERC20, ReentrancyGuard, IERC3156FlashLender {
     }
 
     /// @dev Burn liquidity tokens and transfer pair tokens to the user
+    /// @param _amount Amount of liquidity tokens to burn
     /// @param _to Address to send tokens to
-    /// @param _minimumAmount0 Minimum amount of token0 to receive
-    /// @param _minimumAmount1 Minimum amount of token1 to receive
+    /// @param _minimumAmounts Minimum amount of tokens to receive
     function _burnAndUpdate(
+        uint256 _amount,
         address _to,
-        uint256 _minimumAmount0,
-        uint256 _minimumAmount1
+        MinAmounts memory _minimumAmounts
     ) private {
         (uint112 reserve0, uint112 reserve1) = getReserves();
 
-        address token0 = s_token0;
-        address token1 = s_token1;
+        address token0 = i_token0;
+        address token1 = i_token1;
 
         uint256 liquidity = balanceOf(address(this));
 
@@ -729,11 +732,14 @@ contract Pair is ERC20, ReentrancyGuard, IERC3156FlashLender {
             revert Pair__BurnZeroAmount();
         }
 
-        if (amount0 < _minimumAmount0 || amount1 < _minimumAmount1) {
+        if (
+            amount0 < _minimumAmounts.amount0 ||
+            amount1 < _minimumAmounts.amount1
+        ) {
             revert Pair__InsufficientOutputAmount();
         }
 
-        _burn(address(this), liquidity);
+        _burn(address(this), _amount);
         _safeTransfer(token0, _to, amount0);
         _safeTransfer(token1, _to, amount1);
 

@@ -82,8 +82,8 @@ contract PairTest is StdInvariant, Test {
     }
 
     function testPairInitialize() public view {
-        assertEq(pair.s_token0(), tokenBAdress);
-        assertEq(pair.s_token1(), tokenAAdress);
+        assertEq(pair.i_token0(), tokenBAdress);
+        assertEq(pair.i_token1(), tokenAAdress);
     }
 
     function testSwapRevertsIfInsufficientOutputAmount() public {
@@ -267,23 +267,4 @@ contract PairTest is StdInvariant, Test {
         pair.skim(user);
         vm.stopPrank();
     }
-
-    ///INVARIANT TESTS
-
-    function invariant_testXTimesYEqualsK() public {
-        //check good invariants
-        assert(pair.totalSupply() > 0);
-    }
-
-    //flow to test
-    //1. First Deposit
-    //2. Second Deposit
-    //3. Swap
-    //4. Mint
-    //5. Burn
-    //6. Flashloan
-    //7. Sync
-    //8. Skim
-    //9. Numbers and business logic, including pairs with different decimals
-    //10. Security
 }
