@@ -1,50 +1,109 @@
-## 1. Unused variables
-Compiler run successful with warnings:
-Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
-   --> src/Pair.sol:372:9:
-    |
-372 |         address _token
-    |         ^^^^^^^^^^^^^^
+## 1. Main Analysis
 
-Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
-   --> src/Pair.sol:379:9:
-    |
-379 |         address _token,
-    |         ^^^^^^^^^^^^^^
-
-Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
-  --> test/mocks/UniswapV2Callee.sol:48:9:
-   |
-48 |         address _initiator,
-   |         ^^^^^^^^^^^^^^^^^^
-
-Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
-  --> test/mocks/UniswapV2Callee.sol:49:9:
-   |
-49 |         address _token,
-   |         ^^^^^^^^^^^^^^
-
-Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
-  --> test/mocks/UniswapV2Callee.sol:52:9:
-   |
-52 |         bytes calldata _data
-   |         ^^^^^^^^^^^^^^^^^^^^
-
-## 2. Main Analysis
+## True positives
 INFO:Detectors:
 Pair.flashLoan(IERC3156FlashBorrower,address,uint256,bytes) (src/Pair.sol#158-212) uses arbitrary from in transferFrom: success = IERC20(_token).transferFrom(address(_receiver),address(this),_amount + fee) (src/Pair.sol#196-200)
 Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#arbitrary-from-in-transferfrom
+## False positives
 INFO:Detectors:
-Pair._update(uint256,uint256,uint112,uint112) (src/Pair.sol#397-425) uses a weak PRNG: "blockTimestamp = uint32(((block.timestamp % (type()(uint32).max)) + 1)) (src/Pair.sol#404-406)" 
-Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#weak-PRNG
+Reentrancy in Pair.flashLoan(IERC3156FlashBorrower,address,uint256,bytes) (src/Pair.sol#158-212):
+        External calls:
+        - data = _receiver.onFlashLoan(msg.sender,_token,_amount,fee,_data) (src/Pair.sol#184-190)
+        - success = IERC20(_token).transferFrom(address(_receiver),address(this),_amount + fee) (src/Pair.sol#196-200)
+        State variables written after the call(s):
+        - _update(balance0,balance1,reserve0,reserve1) (src/Pair.sol#209)
+                - s_reserve0 = uint112(_balance0) (src/Pair.sol#419)
+        Pair.s_reserve0 (src/Pair.sol#42) can be used in cross function reentrancies:
+        - Pair.getReserves() (src/Pair.sol#361-368)
+        - _update(balance0,balance1,reserve0,reserve1) (src/Pair.sol#209)
+                - s_reserve1 = uint112(_balance1) (src/Pair.sol#420)
+        Pair.s_reserve1 (src/Pair.sol#43) can be used in cross function reentrancies:
+        - Pair.getReserves() (src/Pair.sol#361-368)
+Reentrancy in Pair.swap(uint256,address,uint256,Pair.ReceiverAndDeadline) (src/Pair.sol#259-313):
+        External calls:
+        - amountIn = _swapTokens(_tokenOut,swapCache.tokenIn,_receiverAndDeadline.receiver,_amountOut,_maximumAmountIn,swapCache.referenceReserveIn,swapCache.referenceReserveOut) (src/Pair.sol#288-296)
+                - success = IERC20(_tokenIn).transferFrom(msg.sender,address(this),amountIn) (src/Pair.sol#645-649)
+        State variables written after the call(s):
+        - _calculateAndValidateBalances(swapCache.amount0Out,swapCache.amount1Out,reserve0,reserve1) (src/Pair.sol#298-303)
+                - s_reserve0 = uint112(_balance0) (src/Pair.sol#419)
+        Pair.s_reserve0 (src/Pair.sol#42) can be used in cross function reentrancies:
+        - Pair.getReserves() (src/Pair.sol#361-368)
+        - _calculateAndValidateBalances(swapCache.amount0Out,swapCache.amount1Out,reserve0,reserve1) (src/Pair.sol#298-303)
+                - s_reserve1 = uint112(_balance1) (src/Pair.sol#420)
+        Pair.s_reserve1 (src/Pair.sol#43) can be used in cross function reentrancies:
+        - Pair.getReserves() (src/Pair.sol#361-368)
+
+
+        INFO:Detectors:
+Pair._burnAndUpdate(uint256,address,Pair.MinAmounts) (src/Pair.sol#709-756) uses a dangerous strict equality:
+        - amount0 == 0 && amount1 == 0 (src/Pair.sol#731)
+Pair._calculateAndValidateBalances(uint256,uint256,uint112,uint112) (src/Pair.sol#581-618) uses a dangerous strict equality:
+        - amount0In == 0 && amount1In == 0 (src/Pair.sol#602)
+Pair._mintAndUpdate(address,uint256) (src/Pair.sol#660-703) uses a dangerous strict equality:
+        - liquidity == 0 (src/Pair.sol#687)
+Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#dangerous-strict-equalities
+
+## 2. Tests
+Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#reentrancy-vulnerabilities-1
 INFO:Detectors:
-IERC20 is re-used:
-        - IERC20 (lib/forge-std/src/interfaces/IERC20.sol#6-43)
-        - IERC20 (src/interfaces/IERC20.sol#4-25)
-IERC721TokenReceiver is re-used:
-        - IERC721TokenReceiver (lib/forge-std/src/interfaces/IERC721.sol#105-121)
-        - IERC721TokenReceiver (lib/forge-std/src/mocks/MockERC721.sol#233-235)
-Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#name-reused
+StdCheatsSafe.readEIP1559ScriptArtifact(string).artifact (lib/forge-std/src/StdCheats.sol#361) is a local variable never initialized
+StdCheatsSafe.rawToConvertedEIP1559Detail(StdCheatsSafe.RawTx1559Detail).txDetail (lib/forge-std/src/StdCheats.sol#397) is a local variable never initialized
+StdCheatsSafe.rawToConvertedReceiptLogs(StdCheatsSafe.RawReceiptLog[]).i (lib/forge-std/src/StdCheats.sol#473) is a local variable never initialized
+StdCheatsSafe.rawToConvertedEIPTx1559(StdCheatsSafe.RawTx1559).transaction (lib/forge-std/src/StdCheats.sol#381) is a local variable never initialized
+StdCheatsSafe.rawToConvertedReceipts(StdCheatsSafe.RawReceipt[]).i (lib/forge-std/src/StdCheats.sol#442) is a local variable never initialized
+StdCheatsSafe.rawToConvertedEIPTx1559s(StdCheatsSafe.RawTx1559[]).i (lib/forge-std/src/StdCheats.sol#374) is a local variable never initialized
+StdCheatsSafe.rawToConvertedReceipt(StdCheatsSafe.RawReceipt).receipt (lib/forge-std/src/StdCheats.sol#449) is a local variable never initialized
+Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#uninitialized-local-variables
+INFO:Detectors:
+StdChains.getChainWithUpdatedRpcUrl(string,StdChains.Chain) (lib/forge-std/src/StdChains.sol#151-186) ignores return value by vm.rpcUrl(chainAlias) (lib/forge-std/src/StdChains.sol#157-183)
+StdCheatsSafe.isFork() (lib/forge-std/src/StdCheats.sol#576-580) ignores return value by vm.activeFork() (lib/forge-std/src/StdCheats.sol#577-579)
+FactoryTest.testCreatePair() (test/Factory.t.sol#68-71) ignores return value by factory.createPair(address(tokenA),address(tokenB)) (test/Factory.t.sol#69)
+FactoryTest.testCreatePairWithIdenticalAddresses() (test/Factory.t.sol#73-76) ignores return value by factory.createPair(address(tokenA),address(tokenA)) (test/Factory.t.sol#75)
+FactoryTest.testCreatePairWithZeroAddress() (test/Factory.t.sol#78-81) ignores return value by factory.createPair(address(0),address(tokenA)) (test/Factory.t.sol#80)
+FactoryTest.testCreatePairWithPairAlreadyExists() (test/Factory.t.sol#83-89) ignores return value by factory.createPair(address(tokenA),address(tokenB)) (test/Factory.t.sol#84)
+FactoryTest.testCreatePairWithPairAlreadyExists() (test/Factory.t.sol#83-89) ignores return value by factory.createPair(address(tokenA),address(tokenB)) (test/Factory.t.sol#86)
+FactoryTest.testCreatePairWithPairAlreadyExists() (test/Factory.t.sol#83-89) ignores return value by factory.createPair(address(tokenB),address(tokenA)) (test/Factory.t.sol#88)
+FactoryTest.testGetPair() (test/Factory.t.sol#91-93) ignores return value by factory.createPair(address(tokenA),address(tokenB)) (test/Factory.t.sol#92)
+PairTest.testFirstMint() (test/Pair.t.sol#109-123) ignores return value by tokenA.approve(address(pair),MINTED_TOKEN_AMOUNT) (test/Pair.t.sol#113)
+PairTest.testFirstMint() (test/Pair.t.sol#109-123) ignores return value by tokenB.approve(address(pair),MINTED_TOKEN_AMOUNT) (test/Pair.t.sol#114)
+PairTest.testFirstMint() (test/Pair.t.sol#109-123) ignores return value by pair.mint(MINTED_TOKEN_AMOUNT,MINTED_TOKEN_AMOUNT,MINIMUM_LIQUIDITY,Pair.ReceiverAndDeadline(user,block.timestamp)) (test/Pair.t.sol#115-120)
+PairTest.testMinWithTokenA() (test/Pair.t.sol#125-140) ignores return value by tokenA.approve(address(pair),MINTED_TOKEN_AMOUNT) (test/Pair.t.sol#129)
+PairTest.testMinWithTokenA() (test/Pair.t.sol#125-140) ignores return value by tokenB.approve(address(pair),MINTED_TOKEN_AMOUNT) (test/Pair.t.sol#130)
+PairTest.testMinWithTokenA() (test/Pair.t.sol#125-140) ignores return value by pair.mint(MINTED_TOKEN_AMOUNT,0,MINIMUM_LIQUIDITY,Pair.ReceiverAndDeadline(user,block.timestamp)) (test/Pair.t.sol#132-137)
+PairTest.testMinWithTokenB() (test/Pair.t.sol#142-157) ignores return value by tokenA.approve(address(pair),MINTED_TOKEN_AMOUNT) (test/Pair.t.sol#146)
+PairTest.testMinWithTokenB() (test/Pair.t.sol#142-157) ignores return value by tokenB.approve(address(pair),MINTED_TOKEN_AMOUNT) (test/Pair.t.sol#147)
+PairTest.testMinWithTokenB() (test/Pair.t.sol#142-157) ignores return value by pair.mint(0,MINTED_TOKEN_AMOUNT,MINIMUM_LIQUIDITY,Pair.ReceiverAndDeadline(user,block.timestamp)) (test/Pair.t.sol#149-154)
+PairTest.testSecondMint() (test/Pair.t.sol#159-173) ignores return value by tokenA.approve(address(pair),MINTED_TOKEN_AMOUNT) (test/Pair.t.sol#163)
+PairTest.testSecondMint() (test/Pair.t.sol#159-173) ignores return value by tokenB.approve(address(pair),MINTED_TOKEN_AMOUNT) (test/Pair.t.sol#164)
+PairTest.testSecondMint() (test/Pair.t.sol#159-173) ignores return value by pair.mint(MINTED_TOKEN_AMOUNT,MINTED_TOKEN_AMOUNT,MINIMUM_LIQUIDITY,Pair.ReceiverAndDeadline(user,block.timestamp)) (test/Pair.t.sol#165-170)
+PairTest.testBurnInitialSupply() (test/Pair.t.sol#175-189) ignores return value by pair.approve(address(pair),BURN_AMOUNT) (test/Pair.t.sol#177)
+PairTest.testBurn() (test/Pair.t.sol#191-204) ignores return value by pair.approve(address(pair),BURN_AMOUNT) (test/Pair.t.sol#193)
+PairTest.hasMinted() (test/Pair.t.sol#44-58) ignores return value by tokenA.approve(address(pair),MINTED_TOKEN_AMOUNT) (test/Pair.t.sol#48)
+PairTest.hasMinted() (test/Pair.t.sol#44-58) ignores return value by tokenB.approve(address(pair),MINTED_TOKEN_AMOUNT) (test/Pair.t.sol#49)
+PairTest.hasMinted() (test/Pair.t.sol#44-58) ignores return value by pair.mint(MINTED_TOKEN_AMOUNT,MINTED_TOKEN_AMOUNT,MINIMUM_LIQUIDITY,Pair.ReceiverAndDeadline(user,block.timestamp + 1000)) (test/Pair.t.sol#50-55)
+UniswapV2Callee.triggerFlashLoanA(uint256) (test/mocks/UniswapV2Callee.sol#20-27) ignores return value by IERC3156FlashLender(i_uniswapPair).flashLoan(IERC3156FlashBorrower(address(this)),i_tokenA,_amount,) (test/mocks/UniswapV2Callee.sol#21-26)
+UniswapV2Callee.triggerFlashLoanB(uint256) (test/mocks/UniswapV2Callee.sol#29-36) ignores return value by IERC3156FlashLender(i_uniswapPair).flashLoan(IERC3156FlashBorrower(address(this)),i_tokenB,_amount,) (test/mocks/UniswapV2Callee.sol#30-35)
+UniswapV2Callee.onFlashLoan(address,address,uint256,uint256,bytes) (test/mocks/UniswapV2Callee.sol#47-57) ignores return value by IERC20(i_tokenA).approve(i_uniswapPair,_amount + _fee) (test/mocks/UniswapV2Callee.sol#54)
+UniswapV2Callee.onFlashLoan(address,address,uint256,uint256,bytes) (test/mocks/UniswapV2Callee.sol#47-57) ignores return value by IERC20(i_tokenB).approve(i_uniswapPair,_amount + _fee) (test/mocks/UniswapV2Callee.sol#55)
+Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#unused-return
+
+INFO:Detectors:
+Contract locking ether found:
+        Contract MockERC721 (lib/forge-std/src/mocks/MockERC721.sol#8-231) has payable functions:
+         - IERC721.safeTransferFrom(address,address,uint256,bytes) (lib/forge-std/src/interfaces/IERC721.sol#53)
+         - IERC721.safeTransferFrom(address,address,uint256) (lib/forge-std/src/interfaces/IERC721.sol#61)
+         - IERC721.transferFrom(address,address,uint256) (lib/forge-std/src/interfaces/IERC721.sol#73)
+         - IERC721.approve(address,uint256) (lib/forge-std/src/interfaces/IERC721.sol#81)
+         - MockERC721.approve(address,uint256) (lib/forge-std/src/mocks/MockERC721.sol#83-91)
+         - MockERC721.transferFrom(address,address,uint256) (lib/forge-std/src/mocks/MockERC721.sol#99-120)
+         - MockERC721.safeTransferFrom(address,address,uint256) (lib/forge-std/src/mocks/MockERC721.sol#122-131)
+         - MockERC721.safeTransferFrom(address,address,uint256,bytes) (lib/forge-std/src/mocks/MockERC721.sol#133-147)
+        But does not have a function to withdraw the ether
+Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#contracts-that-lock-ether
+
+
+## 3. Libraries
+
 INFO:Detectors:
 stdStorageSafe.getMaskByOffsets(uint256,uint256) (lib/forge-std/src/StdStorage.sol#316-322) contains an incorrect shift operation: mask = 1 << 256 - offsetRight + offsetLeft - 1 << offsetRight (lib/forge-std/src/StdStorage.sol#320)
 FixedPointMathLib.sMulWad(int256,int256) (lib/solady/src/utils/FixedPointMathLib.sol#77-88) contains an incorrect shift operation: ! ! x | z /' x == y > ~ x < y == 1 << 255 (lib/solady/src/utils/FixedPointMathLib.sol#82-85)
@@ -143,96 +202,3 @@ FixedPointMathLib.cbrt(uint256) (lib/solady/src/utils/FixedPointMathLib.sol#671-
 FixedPointMathLib.cbrtWad(uint256) (lib/solady/src/utils/FixedPointMathLib.sol#707-721) performs a multiplication on the result of a division:
         - x <= (type()(uint256).max / 10 ** 36) * 10 ** 18 - 1 (lib/solady/src/utils/FixedPointMathLib.sol#710)
 Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#divide-before-multiply
-INFO:Detectors:
-Pair._burnAndUpdate(uint256,address,Pair.MinAmounts) (src/Pair.sol#709-756) uses a dangerous strict equality:
-        - amount0 == 0 && amount1 == 0 (src/Pair.sol#731)
-Pair._calculateAndValidateBalances(uint256,uint256,uint112,uint112) (src/Pair.sol#581-618) uses a dangerous strict equality:
-        - amount0In == 0 && amount1In == 0 (src/Pair.sol#602)
-Pair._mintAndUpdate(address,uint256) (src/Pair.sol#660-703) uses a dangerous strict equality:
-        - liquidity == 0 (src/Pair.sol#687)
-Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#dangerous-strict-equalities
-INFO:Detectors:
-Contract locking ether found:
-        Contract MockERC721 (lib/forge-std/src/mocks/MockERC721.sol#8-231) has payable functions:
-         - IERC721.safeTransferFrom(address,address,uint256,bytes) (lib/forge-std/src/interfaces/IERC721.sol#53)
-         - IERC721.safeTransferFrom(address,address,uint256) (lib/forge-std/src/interfaces/IERC721.sol#61)
-         - IERC721.transferFrom(address,address,uint256) (lib/forge-std/src/interfaces/IERC721.sol#73)
-         - IERC721.approve(address,uint256) (lib/forge-std/src/interfaces/IERC721.sol#81)
-         - MockERC721.approve(address,uint256) (lib/forge-std/src/mocks/MockERC721.sol#83-91)
-         - MockERC721.transferFrom(address,address,uint256) (lib/forge-std/src/mocks/MockERC721.sol#99-120)
-         - MockERC721.safeTransferFrom(address,address,uint256) (lib/forge-std/src/mocks/MockERC721.sol#122-131)
-         - MockERC721.safeTransferFrom(address,address,uint256,bytes) (lib/forge-std/src/mocks/MockERC721.sol#133-147)
-        But does not have a function to withdraw the ether
-Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#contracts-that-lock-ether
-INFO:Detectors:
-Reentrancy in Pair.flashLoan(IERC3156FlashBorrower,address,uint256,bytes) (src/Pair.sol#158-212):
-        External calls:
-        - data = _receiver.onFlashLoan(msg.sender,_token,_amount,fee,_data) (src/Pair.sol#184-190)
-        - success = IERC20(_token).transferFrom(address(_receiver),address(this),_amount + fee) (src/Pair.sol#196-200)
-        State variables written after the call(s):
-        - _update(balance0,balance1,reserve0,reserve1) (src/Pair.sol#209)
-                - s_reserve0 = uint112(_balance0) (src/Pair.sol#419)
-        Pair.s_reserve0 (src/Pair.sol#42) can be used in cross function reentrancies:
-        - Pair.getReserves() (src/Pair.sol#361-368)
-        - _update(balance0,balance1,reserve0,reserve1) (src/Pair.sol#209)
-                - s_reserve1 = uint112(_balance1) (src/Pair.sol#420)
-        Pair.s_reserve1 (src/Pair.sol#43) can be used in cross function reentrancies:
-        - Pair.getReserves() (src/Pair.sol#361-368)
-Reentrancy in Pair.swap(uint256,address,uint256,Pair.ReceiverAndDeadline) (src/Pair.sol#259-313):
-        External calls:
-        - amountIn = _swapTokens(_tokenOut,swapCache.tokenIn,_receiverAndDeadline.receiver,_amountOut,_maximumAmountIn,swapCache.referenceReserveIn,swapCache.referenceReserveOut) (src/Pair.sol#288-296)
-                - success = IERC20(_tokenIn).transferFrom(msg.sender,address(this),amountIn) (src/Pair.sol#645-649)
-        State variables written after the call(s):
-        - _calculateAndValidateBalances(swapCache.amount0Out,swapCache.amount1Out,reserve0,reserve1) (src/Pair.sol#298-303)
-                - s_reserve0 = uint112(_balance0) (src/Pair.sol#419)
-        Pair.s_reserve0 (src/Pair.sol#42) can be used in cross function reentrancies:
-        - Pair.getReserves() (src/Pair.sol#361-368)
-        - _calculateAndValidateBalances(swapCache.amount0Out,swapCache.amount1Out,reserve0,reserve1) (src/Pair.sol#298-303)
-                - s_reserve1 = uint112(_balance1) (src/Pair.sol#420)
-        Pair.s_reserve1 (src/Pair.sol#43) can be used in cross function reentrancies:
-        - Pair.getReserves() (src/Pair.sol#361-368)
-
-
-## 3. Tests
-Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#reentrancy-vulnerabilities-1
-INFO:Detectors:
-StdCheatsSafe.readEIP1559ScriptArtifact(string).artifact (lib/forge-std/src/StdCheats.sol#361) is a local variable never initialized
-StdCheatsSafe.rawToConvertedEIP1559Detail(StdCheatsSafe.RawTx1559Detail).txDetail (lib/forge-std/src/StdCheats.sol#397) is a local variable never initialized
-StdCheatsSafe.rawToConvertedReceiptLogs(StdCheatsSafe.RawReceiptLog[]).i (lib/forge-std/src/StdCheats.sol#473) is a local variable never initialized
-StdCheatsSafe.rawToConvertedEIPTx1559(StdCheatsSafe.RawTx1559).transaction (lib/forge-std/src/StdCheats.sol#381) is a local variable never initialized
-StdCheatsSafe.rawToConvertedReceipts(StdCheatsSafe.RawReceipt[]).i (lib/forge-std/src/StdCheats.sol#442) is a local variable never initialized
-StdCheatsSafe.rawToConvertedEIPTx1559s(StdCheatsSafe.RawTx1559[]).i (lib/forge-std/src/StdCheats.sol#374) is a local variable never initialized
-StdCheatsSafe.rawToConvertedReceipt(StdCheatsSafe.RawReceipt).receipt (lib/forge-std/src/StdCheats.sol#449) is a local variable never initialized
-Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#uninitialized-local-variables
-INFO:Detectors:
-StdChains.getChainWithUpdatedRpcUrl(string,StdChains.Chain) (lib/forge-std/src/StdChains.sol#151-186) ignores return value by vm.rpcUrl(chainAlias) (lib/forge-std/src/StdChains.sol#157-183)
-StdCheatsSafe.isFork() (lib/forge-std/src/StdCheats.sol#576-580) ignores return value by vm.activeFork() (lib/forge-std/src/StdCheats.sol#577-579)
-FactoryTest.testCreatePair() (test/Factory.t.sol#68-71) ignores return value by factory.createPair(address(tokenA),address(tokenB)) (test/Factory.t.sol#69)
-FactoryTest.testCreatePairWithIdenticalAddresses() (test/Factory.t.sol#73-76) ignores return value by factory.createPair(address(tokenA),address(tokenA)) (test/Factory.t.sol#75)
-FactoryTest.testCreatePairWithZeroAddress() (test/Factory.t.sol#78-81) ignores return value by factory.createPair(address(0),address(tokenA)) (test/Factory.t.sol#80)
-FactoryTest.testCreatePairWithPairAlreadyExists() (test/Factory.t.sol#83-89) ignores return value by factory.createPair(address(tokenA),address(tokenB)) (test/Factory.t.sol#84)
-FactoryTest.testCreatePairWithPairAlreadyExists() (test/Factory.t.sol#83-89) ignores return value by factory.createPair(address(tokenA),address(tokenB)) (test/Factory.t.sol#86)
-FactoryTest.testCreatePairWithPairAlreadyExists() (test/Factory.t.sol#83-89) ignores return value by factory.createPair(address(tokenB),address(tokenA)) (test/Factory.t.sol#88)
-FactoryTest.testGetPair() (test/Factory.t.sol#91-93) ignores return value by factory.createPair(address(tokenA),address(tokenB)) (test/Factory.t.sol#92)
-PairTest.testFirstMint() (test/Pair.t.sol#109-123) ignores return value by tokenA.approve(address(pair),MINTED_TOKEN_AMOUNT) (test/Pair.t.sol#113)
-PairTest.testFirstMint() (test/Pair.t.sol#109-123) ignores return value by tokenB.approve(address(pair),MINTED_TOKEN_AMOUNT) (test/Pair.t.sol#114)
-PairTest.testFirstMint() (test/Pair.t.sol#109-123) ignores return value by pair.mint(MINTED_TOKEN_AMOUNT,MINTED_TOKEN_AMOUNT,MINIMUM_LIQUIDITY,Pair.ReceiverAndDeadline(user,block.timestamp)) (test/Pair.t.sol#115-120)
-PairTest.testMinWithTokenA() (test/Pair.t.sol#125-140) ignores return value by tokenA.approve(address(pair),MINTED_TOKEN_AMOUNT) (test/Pair.t.sol#129)
-PairTest.testMinWithTokenA() (test/Pair.t.sol#125-140) ignores return value by tokenB.approve(address(pair),MINTED_TOKEN_AMOUNT) (test/Pair.t.sol#130)
-PairTest.testMinWithTokenA() (test/Pair.t.sol#125-140) ignores return value by pair.mint(MINTED_TOKEN_AMOUNT,0,MINIMUM_LIQUIDITY,Pair.ReceiverAndDeadline(user,block.timestamp)) (test/Pair.t.sol#132-137)
-PairTest.testMinWithTokenB() (test/Pair.t.sol#142-157) ignores return value by tokenA.approve(address(pair),MINTED_TOKEN_AMOUNT) (test/Pair.t.sol#146)
-PairTest.testMinWithTokenB() (test/Pair.t.sol#142-157) ignores return value by tokenB.approve(address(pair),MINTED_TOKEN_AMOUNT) (test/Pair.t.sol#147)
-PairTest.testMinWithTokenB() (test/Pair.t.sol#142-157) ignores return value by pair.mint(0,MINTED_TOKEN_AMOUNT,MINIMUM_LIQUIDITY,Pair.ReceiverAndDeadline(user,block.timestamp)) (test/Pair.t.sol#149-154)
-PairTest.testSecondMint() (test/Pair.t.sol#159-173) ignores return value by tokenA.approve(address(pair),MINTED_TOKEN_AMOUNT) (test/Pair.t.sol#163)
-PairTest.testSecondMint() (test/Pair.t.sol#159-173) ignores return value by tokenB.approve(address(pair),MINTED_TOKEN_AMOUNT) (test/Pair.t.sol#164)
-PairTest.testSecondMint() (test/Pair.t.sol#159-173) ignores return value by pair.mint(MINTED_TOKEN_AMOUNT,MINTED_TOKEN_AMOUNT,MINIMUM_LIQUIDITY,Pair.ReceiverAndDeadline(user,block.timestamp)) (test/Pair.t.sol#165-170)
-PairTest.testBurnInitialSupply() (test/Pair.t.sol#175-189) ignores return value by pair.approve(address(pair),BURN_AMOUNT) (test/Pair.t.sol#177)
-PairTest.testBurn() (test/Pair.t.sol#191-204) ignores return value by pair.approve(address(pair),BURN_AMOUNT) (test/Pair.t.sol#193)
-PairTest.hasMinted() (test/Pair.t.sol#44-58) ignores return value by tokenA.approve(address(pair),MINTED_TOKEN_AMOUNT) (test/Pair.t.sol#48)
-PairTest.hasMinted() (test/Pair.t.sol#44-58) ignores return value by tokenB.approve(address(pair),MINTED_TOKEN_AMOUNT) (test/Pair.t.sol#49)
-PairTest.hasMinted() (test/Pair.t.sol#44-58) ignores return value by pair.mint(MINTED_TOKEN_AMOUNT,MINTED_TOKEN_AMOUNT,MINIMUM_LIQUIDITY,Pair.ReceiverAndDeadline(user,block.timestamp + 1000)) (test/Pair.t.sol#50-55)
-UniswapV2Callee.triggerFlashLoanA(uint256) (test/mocks/UniswapV2Callee.sol#20-27) ignores return value by IERC3156FlashLender(i_uniswapPair).flashLoan(IERC3156FlashBorrower(address(this)),i_tokenA,_amount,) (test/mocks/UniswapV2Callee.sol#21-26)
-UniswapV2Callee.triggerFlashLoanB(uint256) (test/mocks/UniswapV2Callee.sol#29-36) ignores return value by IERC3156FlashLender(i_uniswapPair).flashLoan(IERC3156FlashBorrower(address(this)),i_tokenB,_amount,) (test/mocks/UniswapV2Callee.sol#30-35)
-UniswapV2Callee.onFlashLoan(address,address,uint256,uint256,bytes) (test/mocks/UniswapV2Callee.sol#47-57) ignores return value by IERC20(i_tokenA).approve(i_uniswapPair,_amount + _fee) (test/mocks/UniswapV2Callee.sol#54)
-UniswapV2Callee.onFlashLoan(address,address,uint256,uint256,bytes) (test/mocks/UniswapV2Callee.sol#47-57) ignores return value by IERC20(i_tokenB).approve(i_uniswapPair,_amount + _fee) (test/mocks/UniswapV2Callee.sol#55)
-Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#unused-return
