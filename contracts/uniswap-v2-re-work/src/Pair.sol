@@ -192,7 +192,7 @@ contract Pair is ERC20, ReentrancyGuard, IERC3156FlashLender {
         if (data != keccak256("ERC3156FlashBorrower.onFlashLoan")) {
             revert Pair__InvalidOnFlashLoanReturn();
         }
-
+        //q apply k check here and make this swap more flexible
         bool success = IERC20(_token).transferFrom(
             address(_receiver),
             address(this),
